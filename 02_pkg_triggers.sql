@@ -2,6 +2,7 @@
 SELECT * FROM RESERVAS;
 
 -- paquete  menú restaurant )muestra lo que hay (los platos)
+-- especificación
 CREATE OR REPLACE PACKAGE pkg_reservas
 AS
   g_total_reservas NUMBER := 0;
@@ -39,16 +40,28 @@ IS
     p_cantidad IN NUMBER )
   AS
     v_cupos  NUMBER;  --1 
+    v_estado VARCHAR2(20); --2
     v_precio NUMBER; --3
     v_monto  NUMBER;  --4  
-    v_estado VARCHAR2(20); --2
+    v_estado_usuario VARCHAR2(20);
+  
   BEGIN
+    
+    SELECT estado INTO v_estado_usuario FROM USUARIOS WHERE ID_USUARIO = p_id_usuario;
+
+
+      IF v_estado_usuario != 'ACTIVO' THEN
+        RAISE_APPLICATION_ERROR (-20004, ' SOLO USUARIOS ACTIVOS PUEDEN RESERVAR');
+      END IF;
+
     v_cupos := fn_consultar_cupos( p_id_tour );
 
     IF v_cupos < p_cantidad THEN -- si los cupos son menores a la cantidad entonces... error cupos insuficientes
 
       RAISE_APPLICATION_ERROR(-20001, 'Cupos insuficientes');
     END IF;
+
+    --IF p_cantidad >10 then  aqui practiqué el error de max cantidad de personas
 
     SELECT precio, estado INTO v_precio, v_estado FROM tours WHERE id_tour = p_id_tour;
       IF v_estado != 'ACTIVO' then
@@ -57,10 +70,8 @@ IS
 
       v_monto := fn_calcular_total(v_precio, p_cantidad);  
 
-      
-
     INSERT INTO reservas (id_usuario, id_tour, cantidad_personas,
-      monto_total, estado_reserva, fecha_reserva)
+      monto_total, estado_reserva, fecha_reserva) -- aqui se dispara el tgr
     VALUES (p_id_usuario, p_id_tour, p_cantidad,
       v_monto, 'CONFIRMADA', SYSDATE);  
 
@@ -75,7 +86,7 @@ END pkg_reservas;
 
 CREATE OR REPLACE TRIGGER tgr_validar_datos_usuario
 BEFORE INSERT OR UPDATE ON usuarios
-FOR EACH ROW
+FOR EACH ROW --fila que se inserta o actualiza
 BEGIN
   :NEW.nombre := TRIM( INITCAP( :NEW.nombre ) );
   :NEW.email  := LOWER( REPLACE( :NEW.email, ' ', '' ) );
@@ -104,6 +115,7 @@ SELECT object_name, object_type, status
 
 -- error 1 PLS-00304: compilé el cuerpo antes que la especificación. La solución fue compilar primero la especificación y después el cuerpo.
 --error 2 PLS-00103: bloques pegados sin / hicieron que me de un error, la solucion era poner / al final de cada floque 
---error 3 PLS00231: la IA propuso usar seq_reservas.NEXTVAL, pero la tabla usa IDENTITY. Lo revisé y no lo acepté, por eso el INSERT no lleva id.
+--error 3 PLS00231: a IA puso la función privada dentro del INSERT, y SQL no la ve. La solución fue calcular en v_monto y usar la variable.
 ---------- la solución calcular en v_monto y luego usar la variable en el insert.
 --error 4 ORA-04068: al compilar el cuerpo. se reinicia el estado del paquete por lo que se tiene que volver a ejecutar
+--error 5: la IA propuso seq_reservas.NEXTVAL, pero la tabla usa IDENTITY. 
